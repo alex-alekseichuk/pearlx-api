@@ -1,0 +1,10 @@
+.local
+.env
+.env.template
+tests
+.vscode
+.idea
+.git
+.pytest_cache
+__pycache__
+.DS_Store

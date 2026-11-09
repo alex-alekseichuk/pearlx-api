@@ -1,0 +1,199 @@
+stages:
+  - test
+  - deploy
+  - snyk
+  - e2e-test
+
+run_snyk:
+  stage: snyk
+  tags:
+    - pearlx-api
+  image: python:3.10
+  script:
+    - pwd
+    - whoami
+    - ls -al
+    - curl -fsSL https://deb.nodesource.com/setup_16.x | bash -
+    - apt-get install -y nodejs
+    - node -v
+    - npm -v
+    - npm install -g npm
+    - npm -v
+    - npm install -g snyk
+    - pip install pipenv
+    - pipenv install --dev
+    - pipenv run snyk test
+
+run_pytest:
+  stage: test
+  tags:
+    - pearlx-api
+  image: python:3.10
+  variables:
+    POSTGRES_DB: "db-pearlx-api-flex"
+    POSTGRES_USER: "db-admin"
+    POSTGRES_PASSWORD: "db-password"
+    DATABASE_USERNAME: $POSTGRES_USER
+    DATABASE_PASSWORD: $POSTGRES_PASSWORD
+    DATABASE_NAME: $POSTGRES_DB
+    DATABASE_HOST: postgres
+    DATABASE_URL: postgresql+psycopg2://$DATABASE_USERNAME:$DATABASE_PASSWORD@$DATABASE_HOST:5432/$DATABASE_NAME
+  services:
+    - postgres:13.4
+    - mailhog/mailhog:latest
+  script:
+    - python --version
+    - whoami
+    - pip install pipenv
+    - pipenv install --dev
+    - cp .env.template .env
+    - sed -i -E 's/^(DATABASE_USERNAME)=.*$/\1=${DATABASE_USERNAME}/' .env
+    - sed -i -E 's/^(DATABASE_PASSWORD)=.*$/\1=${DATABASE_PASSWORD}/' .env
+    - sed -i -E 's/^(DATABASE_NAME)=.*$/\1=${DATABASE_NAME}/' .env
+    - sed -i -E 's/^(DATABASE_HOST)=.*$/\1=${DATABASE_HOST}/' .env
+    - sed -i -E 's/^(DATABASE_URL)=.*$/\1=${DATABASE_URL}/' .env
+    - pipenv run flask db upgrade
+    - pipenv run flake8
+    - pipenv run pytest
+
+build-push-ecr-dev:
+  stage: deploy
+  tags:
+    - pearlx-api
+  image:
+    name: amazon/aws-cli
+    entrypoint: [""]
+  variables:
+    AWS_ECR: 270173107048.dkr.ecr.us-east-2.amazonaws.com
+    API_DEFAULT_REGION: us-east-2
+    IMAGE_NAME: pearlx-api
+    IMAGE_TAG: latest
+    CLUSTER: pearlx
+    SERVICE: pearlx-api
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+  services:
+    - docker:dind
+  before_script:
+    - amazon-linux-extras install docker
+    - aws --version
+    - docker --version
+  script:
+    - aws ecr get-login-password --region ${API_DEFAULT_REGION} | docker login --username AWS --password-stdin ${AWS_ECR}
+    - docker build --tag ${AWS_ECR}/${IMAGE_NAME}:${IMAGE_TAG} . && aws ecr batch-delete-image --repository-name ${IMAGE_NAME} --image-ids imageTag=${IMAGE_TAG}
+    - docker push ${AWS_ECR}/${IMAGE_NAME}:${IMAGE_TAG}
+    - aws ecs update-service --cluster ${CLUSTER} --service ${SERVICE} --force-new-deployment
+  only:
+    - develop
+
+e2e-test-dev:
+  stage: e2e-test
+  tags:
+    - pearlx-api
+  image:
+    name: cypress/included:10.8.0
+    entrypoint: ["/usr/bin/env"]
+  variables:
+    CYPRESS_baseUrl: https://pearlx-api-2091523486.us-east-2.elb.amazonaws.com/api/v1
+    CYPRESS_VIDEO: "false"
+    CYPRESS_pluginsFile: "false"
+    CYPRESS_default_admin_email: "dev.admin@some.com"
+  script:
+    - cypress run --project ./e2e-cypress-test
+  only:
+    - develop
+
+build-push-ecr-staging:
+  stage: deploy
+  tags:
+    - pearlx-api
+  image:
+    name: amazon/aws-cli
+    entrypoint: [""]
+  variables:
+    AWS_ECR: 270173107048.dkr.ecr.us-east-2.amazonaws.com
+    API_DEFAULT_REGION: us-east-2
+    IMAGE_NAME: pearlx-api-staging
+    IMAGE_TAG: latest
+    CLUSTER: pearlx-api-staging
+    SERVICE: pearlx-api-staging-PearlxApiService-B3tD3qAj2S7Q
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+  services:
+    - docker:dind
+  before_script:
+    - amazon-linux-extras install docker
+    - aws --version
+    - docker --version
+  script:
+    - aws ecr get-login-password --region ${API_DEFAULT_REGION} | docker login --username AWS --password-stdin ${AWS_ECR}
+    - docker build --tag ${AWS_ECR}/${IMAGE_NAME}:${IMAGE_TAG} . && aws ecr batch-delete-image --repository-name ${IMAGE_NAME} --image-ids imageTag=${IMAGE_TAG}
+    - docker push ${AWS_ECR}/${IMAGE_NAME}:${IMAGE_TAG}
+    - aws ecs update-service --cluster ${CLUSTER} --service ${SERVICE} --force-new-deployment
+  only:
+    - staging
+
+e2e-test-staging:
+  stage: e2e-test
+  tags:
+    - pearlx-api
+  image:
+    name: cypress/included:10.8.0
+    entrypoint: ["/usr/bin/env"]
+  variables:
+    CYPRESS_baseUrl: https://pearlx-api-staging-alb-622739544.us-east-2.elb.amazonaws.com/api/v1
+    CYPRESS_VIDEO: "false"
+    CYPRESS_pluginsFile: "false"
+    CYPRESS_default_admin_email: "staging.admin@some.com"
+  script:
+    - cypress run --project ./e2e-cypress-test
+  only:
+    - staging
+
+build-push-ecr-prod:
+  stage: deploy
+  tags:
+    - pearlx-api
+  image:
+    name: amazon/aws-cli
+    entrypoint: [""]
+  variables:
+    AWS_ECR: 270173107048.dkr.ecr.us-east-2.amazonaws.com
+    API_DEFAULT_REGION: us-east-2
+    IMAGE_NAME: pearlx-api-prod
+    IMAGE_TAG: latest
+    CLUSTER: pearlx-api-prod
+    SERVICE: pearlx-api-prod-PearlxApiService-20xXa2lyCubK
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+  services:
+    - docker:dind
+  before_script:
+    - amazon-linux-extras install docker
+    - aws --version
+    - docker --version
+  script:
+    - aws ecr get-login-password --region ${API_DEFAULT_REGION} | docker login --username AWS --password-stdin ${AWS_ECR}
+    - docker build --tag ${AWS_ECR}/${IMAGE_NAME}:${IMAGE_TAG} . && aws ecr batch-delete-image --repository-name ${IMAGE_NAME} --image-ids imageTag=${IMAGE_TAG}
+    - docker push ${AWS_ECR}/${IMAGE_NAME}:${IMAGE_TAG}
+    - aws ecs update-service --cluster ${CLUSTER} --service ${SERVICE} --force-new-deployment
+  only:
+    - main
+
+e2e-test-e2e:
+  stage: e2e-test
+  tags:
+    - pearlx-api
+  image:
+    name: cypress/included:10.8.0
+    entrypoint: ["/usr/bin/env"]
+  variables:
+    CYPRESS_baseUrl: https://pearlx-api-staging-alb-622739544.us-east-2.elb.amazonaws.com/api/v1
+    CYPRESS_VIDEO: "false"
+    CYPRESS_pluginsFile: "false"
+    CYPRESS_default_admin_email: "staging.admin@some.com"
+  script:
+    - cypress run --project ./e2e-cypress-test
+  only:
+    - e2e
+    

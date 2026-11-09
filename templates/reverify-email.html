@@ -1,0 +1,32 @@
+<div>
+  Hello <b>{{ name }}</b>,
+
+  <p>
+    You recently requested to <b>Re-verify email:</b> {{ email }} for account access.
+    <br />
+    <br />
+    For verifing ownership of this email please make an API call with a validation token: <b>{{ token }}</b> like following:
+  </p>
+  
+  <pre>
+  	<code>
+      POST /api/v1/auth/verify-email
+      Request body: {
+        "email": "{{ email }}",
+        "token": "{{ token }}"
+      }
+    </code>
+  </pre>
+
+  <p>
+    If you did not put this request, please ignore this email and your account is not enabled for API access yet.
+  </p>
+
+  <br />
+  Thank you,
+  <br />
+  <a href="http://www.pearlx.com">PearlX</a> API support
+  <br />
+  <br />
+  <i>NOTE: Please do not reply to this email; it was sent from an unmonitored email address.</i>
+</div>

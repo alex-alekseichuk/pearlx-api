@@ -1,0 +1,26 @@
+[
+  {
+    "ParameterKey": "suffix",
+    "ParameterValue": "prod"
+  },
+  {
+    "ParameterKey": "flaskEnv",
+    "ParameterValue": "production"
+  },
+  {
+    "ParameterKey": "image",
+    "ParameterValue": "270173107048.dkr.ecr.us-east-2.amazonaws.com/pearlx-api-prod:latest"
+  },
+  {
+    "ParameterKey": "instanceCount",
+    "ParameterValue": "2"
+  },
+  {
+    "ParameterKey": "certArn",
+    "ParameterValue": "arn:aws:acm:us-east-2:270173107048:certificate/3d8d8922-fd8e-40c0-bfb2-068f23f703a1"
+  },
+  {
+    "ParameterKey": "emailFrom",
+    "ParameterValue": "no-reply@some.com"
+  }
+]

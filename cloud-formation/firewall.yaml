@@ -1,0 +1,49 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Pearlx API Firewall"
+Parameters:
+  suffix:
+    Description: staging or prod
+    Type: String
+  albArn:
+    Description: ALB ARN
+    Type: String
+Resources:
+  webAcl:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Description: Web ACL for Application Load Balancer
+      Name: !Sub 'pearlx-webacl-${suffix}'
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        CloudWatchMetricsEnabled: true
+        SampledRequestsEnabled: true
+        MetricName: !Sub 'pearlx-webacl-${suffix}'
+      Rules:
+        - Name: BLOCK-LOGIN-LIMIT
+          Priority: 0
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              AggregateKeyType: IP
+              Limit: 100
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  FieldToMatch:
+                    UriPath: {}
+                  PositionalConstraint: STARTS_WITH
+                  SearchString: /api/v1/auth/login
+                  TextTransformations:
+                    - Type: NONE
+                      Priority: 0
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            SampledRequestsEnabled: true
+            MetricName: !Sub 'pearlx-webacl-${suffix}-login-limit'
+  albWebACLAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !Ref albArn
+      WebACLArn: !GetAtt webAcl.Arn

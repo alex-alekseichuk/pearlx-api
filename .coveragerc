@@ -1,0 +1,6 @@
+[run]
+omit = src/pearlx_api_flex/db/*
+       tests/*
+       migrations/*
+       misc/*
+       load_tests

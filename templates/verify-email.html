@@ -1,0 +1,32 @@
+<div>
+  Hello <b>{{ name }}</b>,
+
+  <p>
+    You recently registered a <b>New Account</b> with your email: {{ email }}
+    <br />
+    <br />
+    Before we can enable your new account for API access, you need to verify ownership of this email by making an API call with a validation token: <b>{{ token }}</b> like following:
+  </p>
+  
+  <pre>
+  	<code>
+      POST /api/v1/auth/verify-email-token
+      Request body: {
+        "email": "{{ email }}",
+        "token": "{{ token }}"
+      }
+    </code>
+  </pre>
+
+  <p>
+    If you did not register a new account with this email: {{ email }}}, please ignore this email and we have not enable API access for this account yet.
+  </p>
+
+  <br />
+  Thank you,
+  <br />
+  <a href="http://www.pearlx.com">PearlX</a> API support
+  <br />
+  <br />
+  <i>NOTE: Please do not reply to this email; it was sent from an unmonitored email address.</i>
+</div>

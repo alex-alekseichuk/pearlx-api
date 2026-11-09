@@ -1,0 +1,165 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Pearlx API"
+Parameters:
+  suffix:
+    Description: staging or prod
+    Type: String
+  flaskEnv:
+    Description: development or production
+    Type: String
+  image:
+    Description: Docker image
+    Type: String
+  instanceCount:
+    Description: Number of tasks to run
+    Type: Number
+  certArn:
+    Description: Certificate ARN
+    Type: String
+  emailFrom:
+    Description: Email address used in From field
+    Type: String
+Resources:
+  PearlxApiTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      RequiresCompatibilities:
+        - "FARGATE"
+      TaskRoleArn: "arn:aws:iam::270173107048:role/pearlx-api-task-role"
+      ExecutionRoleArn: "arn:aws:iam::270173107048:role/pearlx-api-exec-role"
+      Cpu: 512
+      Memory: 1024
+      NetworkMode: "awsvpc"
+      ContainerDefinitions:
+        - Name: !Sub 'pearlx-api-${suffix}'
+          Image: !Sub ${image}
+          MemoryReservation: 128
+          Memory: 1024
+          PortMappings:
+            - ContainerPort: 5000
+              Protocol: tcp
+          Environment:
+            - Name: AWS_REGION
+              Value: us-east-2
+            - Name: AWS_SECRETS_NANE
+              Value: !Sub 'pearlx-api/${suffix}/config'
+            - Name: COLORED_LOGS
+              Value: 0
+            - Name: EMAIL_FROM
+              Value: !Sub '${emailFrom}'
+            - Name: FLASK_APP
+              Value: run.py
+            - Name: FLASK_DEBUG
+              Value: 0
+            - Name: FLASK_ENV
+              Value: !Sub ${flaskEnv}
+            - Name: LOG_LEVEL
+              Value: debug
+            - Name: SCHEDULER_ENABLED
+              Value: 1
+            - Name: SCHEDULER_REFRESH_FROM_TIMESTREAM
+              Value: "0 0 * * *"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub '/ecs/pearlx-api-${suffix}'
+              awslogs-region: us-east-2
+              awslogs-stream-prefix: ecs
+  PearlxApiCluster:
+    Type: 'AWS::ECS::Cluster'
+    Properties:
+      ClusterName: !Sub 'pearlx-api-${suffix}'
+  PearlxApiAlb:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Name: !Sub 'pearlx-api-${suffix}-alb'
+      Subnets:
+        - subnet-6730d70c
+        - subnet-94c440d8
+        - subnet-22a1fc58
+      Type: application
+      SecurityGroups:
+        - !GetAtt PearlxApiAlbSg.GroupId
+  PearlxApiTg:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      Name: !Sub 'pearlx-api-${suffix}-tg'
+      VpcId: vpc-18da2573
+      Protocol: HTTP
+      Port: 5000
+      HealthCheckPath: /api/v1/ping
+      TargetType: ip
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      UnhealthyThresholdCount: 2
+      HealthCheckIntervalSeconds: 30
+      Matcher:
+        HttpCode: 200
+  PearlxApiListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref PearlxApiTg
+          Type: forward
+      LoadBalancerArn: !Ref PearlxApiAlb
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Sub '${certArn}'
+  PearlxApiAlbSg:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: SG for the Fargate ALB
+      GroupName: !Sub 'pearlx-api-${suffix}-alb-sg'
+      VpcId: vpc-18da2573
+      SecurityGroupIngress:
+        - CidrIpv6: ::/0
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: TCP
+          Description: 'Inbound rule for IPv6 traffic'
+        - CidrIp: 0.0.0.0/0
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: TCP
+          Description: 'Inbound rule for IPv4 traffic'
+  PearlxApiAlb2EcsSg:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: SG for traffic between ALB and containers
+      GroupName: !Sub 'pearlx-api-${suffix}-sg'
+      VpcId: vpc-18da2573
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          SourceSecurityGroupId: !GetAtt PearlxApiAlbSg.GroupId
+          Description: 'Inbound rule for all traffic'
+  PearlxApiService:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - PearlxApiListener
+    Properties:
+      LaunchType: FARGATE
+      Cluster:
+        Ref: "PearlxApiCluster"
+      DesiredCount: !Sub ${instanceCount}
+      TaskDefinition:
+        Ref: "PearlxApiTaskDefinition"
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !GetAtt PearlxApiAlb2EcsSg.GroupId
+          Subnets: ['subnet-6730d70c','subnet-94c440d8', 'subnet-22a1fc58']
+      LoadBalancers:
+        - TargetGroupArn:
+            Ref: PearlxApiTg
+          ContainerPort: 5000
+          ContainerName: !Sub 'pearlx-api-${suffix}'
+Outputs:
+  EcsService:
+    Value: !GetAtt PearlxApiService.Name
+  EcsSg:
+    Value: !GetAtt PearlxApiAlb2EcsSg.GroupId

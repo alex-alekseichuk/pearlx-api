@@ -1,0 +1,26 @@
+[
+  {
+    "ParameterKey": "suffix",
+    "ParameterValue": "staging"
+  },
+  {
+    "ParameterKey": "flaskEnv",
+    "ParameterValue": "development"
+  },
+  {
+    "ParameterKey": "image",
+    "ParameterValue": "270173107048.dkr.ecr.us-east-2.amazonaws.com/pearlx-api-staging:latest"
+  },
+  {
+    "ParameterKey": "instanceCount",
+    "ParameterValue": "1"
+  },
+  {
+    "ParameterKey": "certArn",
+    "ParameterValue": "arn:aws:acm:us-east-2:270173107048:certificate/3d8d8922-fd8e-40c0-bfb2-068f23f703a1"
+  },
+  {
+    "ParameterKey": "emailFrom",
+    "ParameterValue": "no-reply_staging@some.com"
+  }
+]
